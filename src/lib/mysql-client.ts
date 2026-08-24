@@ -1,7 +1,6 @@
 /**
- * Interface and client service for MySQL Lookup via PocketBase SDK
+ * Interface and client service for MySQL Lookup via Supabase Edge Function
  */
-import pb from '@/lib/pocketbase/client'
 
 export interface ClienteMySQLResult {
   id_cliente: number
@@ -30,6 +29,20 @@ export interface LookupResponse<T> {
   message?: string
 }
 
+function getSupabaseConfig(): { url: string; anonKey: string } | null {
+  const url = import.meta.env.VITE_SUPABASE_URL
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+  if (!url) {
+    return null
+  }
+
+  return {
+    url: url.replace(/\/+$/, ''),
+    anonKey: anonKey || '',
+  }
+}
+
 /**
  * Normaliza erros retornando mensagens amigáveis em português
  */
@@ -56,7 +69,9 @@ function parseErrorMessage(err: any): { errorMsg: string; configured: boolean } 
   if (
     status === 0 ||
     err?.name === 'ClientResponseError 0' ||
-    err?.message?.includes('Failed to fetch')
+    err?.name === 'TypeError' ||
+    err?.message?.includes('Failed to fetch') ||
+    err?.message?.includes('NetworkError')
   ) {
     return {
       configured: true,
@@ -79,8 +94,57 @@ function parseErrorMessage(err: any): { errorMsg: string; configured: boolean } 
 }
 
 /**
- * Fluxo 1: Chama a server function buscarClientePorCNPJ via PocketBase SDK
- * pb.send('/api/custom/buscar-cliente', { method: 'POST', body: { cnpj: valor } })
+ * Executa requisição para a Edge Function Supabase (mysql-lookup)
+ */
+async function callMysqlLookup<T>(payload: Record<string, any>): Promise<LookupResponse<T>> {
+  const config = getSupabaseConfig()
+  if (!config) {
+    return {
+      configured: false,
+      error:
+        'A URL da API Supabase (VITE_SUPABASE_URL) não está configurada no ambiente da aplicação.',
+      data: null,
+    }
+  }
+
+  const endpoint = `${config.url}/functions/v1/mysql-lookup`
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+
+  if (config.anonKey) {
+    headers['Authorization'] = `Bearer ${config.anonKey}`
+    headers['apikey'] = config.anonKey
+  }
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  })
+
+  let json: any = null
+  try {
+    json = await res.json()
+  } catch {
+    throw new Error(`Resposta inválida do servidor (HTTP ${res.status}).`)
+  }
+
+  if (!res.ok) {
+    if (json?.configured === false) {
+      return json
+    }
+    const errObj: any = new Error(json?.error || `Erro HTTP ${res.status} ao consultar MySQL`)
+    errObj.status = res.status
+    errObj.data = json
+    throw errObj
+  }
+
+  return json
+}
+
+/**
+ * Fluxo 1: Chama a Edge Function buscarClientePorCNPJ
  */
 export async function apiBuscarClientePorCNPJ(
   cnpj: string,
@@ -89,11 +153,9 @@ export async function apiBuscarClientePorCNPJ(
     const clean = (cnpj || '').trim()
     if (!clean) return { cliente: null, configured: true }
 
-    const res = await pb.send<LookupResponse<ClienteMySQLResult>>('/api/custom/buscar-cliente', {
-      method: 'POST',
-      body: {
-        cnpj: clean,
-      },
+    const res = await callMysqlLookup<ClienteMySQLResult>({
+      action: 'buscarClientePorCNPJ',
+      cnpj: clean,
     })
 
     if (res?.configured === false) {
@@ -102,7 +164,7 @@ export async function apiBuscarClientePorCNPJ(
         configured: false,
         error:
           res.error ||
-          'A senha do banco MySQL (MYSQL_PASSWORD) não está configurada. Configure a variável no painel do servidor.',
+          'A senha do banco MySQL (MYSQL_PASSWORD) não está configurada. Configure o segredo na Edge Function.',
       }
     }
 
@@ -114,7 +176,7 @@ export async function apiBuscarClientePorCNPJ(
       error: res?.error,
     }
   } catch (err: any) {
-    console.error('Erro ao buscar cliente por CNPJ via PocketBase:', err)
+    console.error('Erro ao buscar cliente por CNPJ via Supabase Function:', err)
     const { errorMsg, configured } = parseErrorMessage(err)
     return {
       cliente: null,
@@ -125,8 +187,7 @@ export async function apiBuscarClientePorCNPJ(
 }
 
 /**
- * Fluxo 2: Chama a server function buscarProdutoPorCodigo via PocketBase SDK
- * pb.send('/api/custom/buscar-produto', { method: 'POST', body: { id_cliente, valor_informado } })
+ * Fluxo 2: Chama a Edge Function buscarProdutoPorCodigo
  */
 export async function apiBuscarProdutoPorCodigo(
   idCliente: number | string,
@@ -136,14 +197,10 @@ export async function apiBuscarProdutoPorCodigo(
     const val = (valorInformado || '').trim()
     if (!idCliente || !val) return { produto: null, configured: true }
 
-    const res = await pb.send<LookupResponse<ProdutoMySQLResult>>('/api/custom/buscar-produto', {
-      method: 'POST',
-      body: {
-        id_cliente: idCliente,
-        valor_informado: val,
-        // Também envia chave alternativa caso o hook leia 'valor'
-        valor: val,
-      },
+    const res = await callMysqlLookup<ProdutoMySQLResult>({
+      action: 'buscarProdutoPorCodigo',
+      id_cliente: typeof idCliente === 'string' ? parseInt(idCliente, 10) || idCliente : idCliente,
+      valor: val,
     })
 
     if (res?.configured === false) {
@@ -152,7 +209,7 @@ export async function apiBuscarProdutoPorCodigo(
         configured: false,
         error:
           res.error ||
-          'A senha do banco MySQL (MYSQL_PASSWORD) não está configurada. Configure a variável no painel do servidor.',
+          'A senha do banco MySQL (MYSQL_PASSWORD) não está configurada. Configure o segredo na Edge Function.',
       }
     }
 
@@ -164,7 +221,7 @@ export async function apiBuscarProdutoPorCodigo(
       error: res?.error,
     }
   } catch (err: any) {
-    console.error('Erro ao buscar produto por código via PocketBase:', err)
+    console.error('Erro ao buscar produto por código via Supabase Function:', err)
     const { errorMsg, configured } = parseErrorMessage(err)
     return {
       produto: null,
