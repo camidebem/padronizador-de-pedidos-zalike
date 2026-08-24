@@ -38,6 +38,13 @@ export default function Review() {
     setLocalItems((prev) => prev.filter((item) => item.id !== id))
   }
 
+  const handleClientFound = (cliente: any) => {
+    toast({
+      title: 'Cliente identificado',
+      description: `${cliente.fantasia || cliente.nome} — Dados sincronizados do MySQL.`,
+    })
+  }
+
   const handleCancel = () => {
     clearOrder()
     navigate('/dashboard')
@@ -95,9 +102,15 @@ export default function Review() {
         </p>
       </div>
 
-      <ReviewHeaderForm header={localHeader} onChange={setLocalHeader} />
+      <ReviewHeaderForm
+        header={localHeader}
+        onChange={setLocalHeader}
+        onClientFound={handleClientFound}
+      />
       <ReviewItemsTable
         items={localItems}
+        idCliente={localHeader.idCliente}
+        idConvenio={localHeader.idConvenio}
         onChange={handleItemChange}
         onRemove={handleRemoveItem}
       />

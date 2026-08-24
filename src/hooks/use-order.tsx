@@ -7,6 +7,11 @@ export interface OrderHeader {
   paymentDesc: string
   obs: string
   nature: string
+  // Dados sincronizados do MySQL
+  idCliente?: number
+  idConvenio?: number
+  clientName?: string
+  clientFantasia?: string
 }
 
 export interface OrderItem {
@@ -21,6 +26,7 @@ interface OrderContextType {
   header: OrderHeader | null
   items: OrderItem[]
   setHeader: (header: OrderHeader | null) => void
+  updateHeader?: (newHeader: Partial<OrderHeader>) => void
   setItems: (items: OrderItem[]) => void
   clearOrder: () => void
 }
@@ -31,13 +37,26 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const [header, setHeader] = useState<OrderHeader | null>(null)
   const [items, setItems] = useState<OrderItem[]>([])
 
+  const updateHeader = (newHeader: Partial<OrderHeader>) => {
+    setHeader((prev) => (prev ? { ...prev, ...newHeader } : null))
+  }
+
   const clearOrder = () => {
     setHeader(null)
     setItems([])
   }
 
   return (
-    <OrderContext.Provider value={{ header, items, setHeader, setItems, clearOrder }}>
+    <OrderContext.Provider
+      value={{
+        header,
+        items,
+        setHeader,
+        updateHeader,
+        setItems,
+        clearOrder,
+      }}
+    >
       {children}
     </OrderContext.Provider>
   )

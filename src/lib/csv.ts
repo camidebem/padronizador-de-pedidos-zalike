@@ -22,17 +22,17 @@ export function generateCSV(header: OrderHeader, items: OrderItem[]): void {
 
   for (const item of items) {
     const rowData = [
-      header.cnpj,
-      header.repCode,
-      header.paymentCode,
-      header.paymentDesc,
-      header.obs,
-      header.nature,
+      header.cnpj || '',
+      header.repCode || '',
+      header.paymentCode || '',
+      header.paymentDesc || '',
+      header.obs || '',
+      header.nature || '',
       '', // CNPJ da Transportadora (Always empty)
-      item.itemCode,
-      item.barcode,
-      item.reference,
-      item.qty,
+      item.itemCode || '',
+      item.barcode || '',
+      item.reference || '',
+      item.qty || '',
     ]
 
     // Escape quotes and wrap in quotes to prevent issue with semicolons in data
