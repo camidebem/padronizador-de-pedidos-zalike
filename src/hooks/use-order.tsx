@@ -7,11 +7,6 @@ export interface OrderHeader {
   paymentDesc: string
   obs: string
   nature: string
-  // Dados sincronizados do MySQL
-  idCliente?: number
-  idConvenio?: number
-  clientName?: string
-  clientFantasia?: string
 }
 
 export interface OrderItem {

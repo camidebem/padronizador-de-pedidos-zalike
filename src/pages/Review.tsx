@@ -10,7 +10,7 @@ import { CheckCircle, XCircle } from 'lucide-react'
 
 export default function Review() {
   const navigate = useNavigate()
-  const { header, items, setHeader, setItems, clearOrder } = useOrder()
+  const { header, items, clearOrder } = useOrder()
   const { toast } = useToast()
 
   // Local state for edits
@@ -36,13 +36,6 @@ export default function Review() {
 
   const handleRemoveItem = (id: string) => {
     setLocalItems((prev) => prev.filter((item) => item.id !== id))
-  }
-
-  const handleClientFound = (cliente: any) => {
-    toast({
-      title: 'Cliente identificado',
-      description: `${cliente.fantasia || cliente.nome} — Dados sincronizados do MySQL.`,
-    })
   }
 
   const handleCancel = () => {
@@ -102,15 +95,9 @@ export default function Review() {
         </p>
       </div>
 
-      <ReviewHeaderForm
-        header={localHeader}
-        onChange={setLocalHeader}
-        onClientFound={handleClientFound}
-      />
+      <ReviewHeaderForm header={localHeader} onChange={setLocalHeader} />
       <ReviewItemsTable
         items={localItems}
-        idCliente={localHeader.idCliente}
-        idConvenio={localHeader.idConvenio}
         onChange={handleItemChange}
         onRemove={handleRemoveItem}
       />
