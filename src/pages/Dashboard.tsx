@@ -4,6 +4,7 @@ import { UploadCloud, FileText, FileSpreadsheet, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { useOrder } from '@/hooks/use-order'
 import { processFile } from '@/lib/parser'
+import { enrichHeaderFromCnpj, enrichItemsWithIdCliente } from '@/lib/erp'
 import { useToast } from '@/hooks/use-toast'
 
 export default function Dashboard() {
@@ -33,8 +34,18 @@ export default function Dashboard() {
     setIsProcessing(true)
     try {
       const data = await processFile(file)
-      setHeader(data.header)
-      setItems(data.items)
+
+      // Fluxo 1 e 2 do preenchimento automático (MySQL externo via
+      // zalike-erp-bridge): busca o cliente pelo CNPJ extraído e, com o
+      // idCliente resolvido, o código interno de cada item. Ambos
+      // degradam para os campos manuais existentes se o bridge não
+      // estiver configurado, o cliente/produto não for encontrado, ou o
+      // banco externo estiver indisponível.
+      const enrichedHeader = await enrichHeaderFromCnpj(data.header)
+      const enrichedItems = await enrichItemsWithIdCliente(data.items, enrichedHeader.idCliente)
+
+      setHeader(enrichedHeader)
+      setItems(enrichedItems)
       toast({
         title: 'Sucesso',
         description: 'Dados extraídos com sucesso. Revise as informações.',
