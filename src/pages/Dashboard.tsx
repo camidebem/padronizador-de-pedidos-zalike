@@ -24,6 +24,13 @@ import { processFilePipeline } from '@/lib/pipeline'
 import { ExtractedOrder, ExtractionResult } from '@/lib/extractor-types'
 import { enrichHeaderFromCnpj, enrichItemsWithIdCliente } from '@/lib/erp'
 import { useToast } from '@/hooks/use-toast'
+import {
+  loadActiveExtraction,
+  saveActiveExtraction,
+  loadProcessedOrderIds,
+  resetProcessedOrders,
+  clearActiveExtraction,
+} from '@/lib/order-storage'
 
 export default function Dashboard() {
   const [isDragging, setIsDragging] = useState(false)
@@ -41,16 +48,16 @@ export default function Dashboard() {
   // Restore state from sessionStorage if user navigates back from review
   useEffect(() => {
     try {
-      const savedResult = sessionStorage.getItem('zalike_active_extraction')
+      const savedResult = loadActiveExtraction()
       if (savedResult) {
-        setExtractionResult(JSON.parse(savedResult))
+        setExtractionResult(savedResult)
       }
-      const savedProcessed = sessionStorage.getItem('zalike_processed_orders')
-      if (savedProcessed) {
-        setProcessedOrderIds(new Set(JSON.parse(savedProcessed)))
+      const savedProcessed = loadProcessedOrderIds()
+      if (savedProcessed && savedProcessed.length > 0) {
+        setProcessedOrderIds(new Set(savedProcessed))
       }
-    } catch {
-      /* intentionally ignored */
+    } catch (err) {
+      console.warn('[dashboard] Falha ao restaurar dados da sessão:', err)
     }
   }, [])
 
@@ -91,21 +98,16 @@ export default function Dashboard() {
       // If exactly 1 order, enrich and go straight to review
       if (result.orders.length === 1) {
         const singleOrder = result.orders[0]
-        try {
-          sessionStorage.removeItem('zalike_active_extraction')
-          sessionStorage.removeItem('zalike_processed_orders')
-        } catch {
-          /* intentionally ignored */
-        }
+        clearActiveExtraction()
         await proceedToReview(singleOrder)
       } else {
         // Multiple orders detected: save in sessionStorage and show multi-order selection screen
         setExtractionResult(result)
         try {
-          sessionStorage.setItem('zalike_active_extraction', JSON.stringify(result))
-          sessionStorage.setItem('zalike_processed_orders', JSON.stringify([]))
-        } catch {
-          /* intentionally ignored */
+          saveActiveExtraction(result)
+          resetProcessedOrders()
+        } catch (saveErr) {
+          console.warn('[dashboard] Erro ao salvar extração ativa:', saveErr)
         }
         toast({
           title: `${result.orders.length} pedidos detectados no arquivo`,
@@ -187,12 +189,7 @@ export default function Dashboard() {
     setExtractionResult(null)
     setProcessedOrderIds(new Set())
     setSearchTerm('')
-    try {
-      sessionStorage.removeItem('zalike_active_extraction')
-      sessionStorage.removeItem('zalike_processed_orders')
-    } catch {
-      /* intentionally ignored */
-    }
+    clearActiveExtraction()
   }
 
   const onDragOver = (e: React.DragEvent) => {

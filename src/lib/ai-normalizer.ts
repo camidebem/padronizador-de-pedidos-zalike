@@ -49,11 +49,25 @@ export async function normalizeTextWithAi(
   })
 
   if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({}))
-    throw new Error(errorBody.error || `Falha na requisição da IA (${response.status})`)
+    let errorMsg = `Falha na requisição da IA (${response.status})`
+    try {
+      const errorBody = await response.json()
+      if (errorBody && errorBody.error) {
+        errorMsg = errorBody.error
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new Error(errorMsg)
   }
 
-  const data = (await response.json()) as AiNormalizeResponse
+  let data: AiNormalizeResponse
+  try {
+    data = (await response.json()) as AiNormalizeResponse
+  } catch (parseErr) {
+    console.warn('[ai-normalizer] Resposta da API não é JSON válido:', parseErr)
+    return []
+  }
 
   if (!data.ok || !data.orders || data.orders.length === 0) {
     // Return empty array indicating fallback is needed

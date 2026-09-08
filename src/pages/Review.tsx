@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useOrder, OrderHeader, OrderItem } from '@/hooks/use-order'
 import { useToast } from '@/hooks/use-toast'
 import { generateCSV } from '@/lib/csv'
+import { markOrderAsProcessed } from '@/lib/order-storage'
 import { Button } from '@/components/ui/button'
 import { ReviewHeaderForm } from '@/components/ReviewHeaderForm'
 import { ReviewItemsTable } from '@/components/ReviewItemsTable'
@@ -23,16 +24,15 @@ export default function Review() {
     if (!header && items.length === 0 && !rawText) {
       navigate('/dashboard')
     } else {
-      setLocalHeader(
-        header || {
-          cnpj: '',
-          repCode: '',
-          paymentCode: '',
-          paymentDesc: '',
-          obs: '',
-          nature: 'Venda',
-        },
-      )
+      setLocalHeader({
+        cnpj: String(header?.cnpj || ''),
+        repCode: String(header?.repCode || ''),
+        paymentCode: String(header?.paymentCode || ''),
+        paymentDesc: String(header?.paymentDesc || ''),
+        obs: String(header?.obs || ''),
+        nature: String(header?.nature || 'Venda'),
+        idCliente: header?.idCliente || null,
+      })
       setLocalItems(items)
     }
   }, [header, items, navigate, rawText])
@@ -102,15 +102,9 @@ export default function Review() {
     // Mark order as completed in session storage so dashboard preserves multi-order state
     if (currentOrderId) {
       try {
-        const stored = JSON.parse(sessionStorage.getItem('zalike_processed_orders') || '[]')
-        if (!stored.includes(currentOrderId)) {
-          sessionStorage.setItem(
-            'zalike_processed_orders',
-            JSON.stringify([...stored, currentOrderId]),
-          )
-        }
-      } catch {
-        /* intentionally ignored */
+        markOrderAsProcessed(currentOrderId)
+      } catch (storageErr) {
+        console.warn('[review] Erro ao marcar pedido como processado:', storageErr)
       }
     }
 

@@ -72,10 +72,7 @@ interface SseBlock {
   data: string
 }
 
-async function* readSseBlocks(
-  response: Response,
-  signal?: AbortSignal,
-): AsyncGenerator<SseBlock> {
+async function* readSseBlocks(response: Response, signal?: AbortSignal): AsyncGenerator<SseBlock> {
   if (!response.body) return
   const reader = response.body.getReader()
   // Wire abort directly into the reader. reader.cancel(reason) makes
@@ -186,7 +183,7 @@ export async function* parseChatStream(
   signal?: AbortSignal,
 ): AsyncGenerator<OpenAIChatStreamChunk> {
   for await (const block of readSseBlocks(response, signal)) {
-    if (!block.data || block.data === '[DONE]') continue
+    if (!block.data || block.data.trim() === '[DONE]') continue
     let parsed: unknown
     try {
       parsed = JSON.parse(block.data)
@@ -204,7 +201,7 @@ export async function* parseAgentChatStream(
   signal?: AbortSignal,
 ): AsyncGenerator<AgentChatStreamEvent> {
   for await (const block of readSseBlocks(response, signal)) {
-    if (!block.data) continue
+    if (!block.data || block.data.trim() === '[DONE]') continue
     let parsed: unknown
     try {
       parsed = JSON.parse(block.data)

@@ -43,6 +43,13 @@ routerAdd('POST', '/api/zalike/normalize-order', (e) => {
       jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '')
     }
 
+    // Try finding JSON block {...} if response contains surrounding conversational text
+    const firstBrace = jsonStr.indexOf('{')
+    const lastBrace = jsonStr.lastIndexOf('}')
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      jsonStr = jsonStr.slice(firstBrace, lastBrace + 1)
+    }
+
     let parsed
     try {
       parsed = JSON.parse(jsonStr)
