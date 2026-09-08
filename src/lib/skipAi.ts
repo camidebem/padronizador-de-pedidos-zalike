@@ -183,7 +183,7 @@ export async function* parseChatStream(
   signal?: AbortSignal,
 ): AsyncGenerator<OpenAIChatStreamChunk> {
   for await (const block of readSseBlocks(response, signal)) {
-    if (!block.data || block.data.trim() === '[DONE]') continue
+    if (!block.data || block.data === '[DONE]') continue
     let parsed: unknown
     try {
       parsed = JSON.parse(block.data)
@@ -201,7 +201,7 @@ export async function* parseAgentChatStream(
   signal?: AbortSignal,
 ): AsyncGenerator<AgentChatStreamEvent> {
   for await (const block of readSseBlocks(response, signal)) {
-    if (!block.data || block.data.trim() === '[DONE]') continue
+    if (!block.data) continue
     let parsed: unknown
     try {
       parsed = JSON.parse(block.data)

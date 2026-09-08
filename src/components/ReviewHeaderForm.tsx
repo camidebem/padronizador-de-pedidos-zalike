@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { OrderHeader } from '@/hooks/use-order'
 import { enrichHeaderFromCnpj } from '@/lib/erp'
+import { formatCnpj } from '@/lib/utils'
 import { Building2, Loader2 } from 'lucide-react'
 
 interface Props {
@@ -21,13 +22,29 @@ export function ReviewHeaderForm({ header, onChange }: Props) {
   // Re-dispara o Fluxo 1 quando o usuário edita o CNPJ manualmente na tela
   // de revisão (ex.: corrigindo um valor extraído errado do PDF/Excel).
   const handleCnpjBlur = async () => {
-    if (!header.cnpj.trim()) return
+    const rawVal = header.cnpj.trim()
+    if (!rawVal) return
+
+    const formatted = formatCnpj(rawVal)
+    const updatedHeader = { ...header, cnpj: formatted }
+    onChange(updatedHeader)
+
     setIsLookingUpCnpj(true)
     try {
-      const enriched = await enrichHeaderFromCnpj(header)
+      const enriched = await enrichHeaderFromCnpj(updatedHeader)
       onChange(enriched)
     } finally {
       setIsLookingUpCnpj(false)
+    }
+  }
+
+  const handleCnpjChange = (rawInput: string) => {
+    // Se o usuário colou 14 dígitos de uma vez, formata imediatamente
+    const onlyDigits = rawInput.replace(/\D/g, '')
+    if (onlyDigits.length === 14 && rawInput.length === 14) {
+      handleChange('cnpj', formatCnpj(rawInput))
+    } else {
+      handleChange('cnpj', rawInput)
     }
   }
 
@@ -50,7 +67,7 @@ export function ReviewHeaderForm({ header, onChange }: Props) {
             <Input
               id="cnpj"
               value={header.cnpj}
-              onChange={(e) => handleChange('cnpj', e.target.value)}
+              onChange={(e) => handleCnpjChange(e.target.value)}
               onBlur={handleCnpjBlur}
               placeholder="00.000.000/0000-00"
               className="font-medium"

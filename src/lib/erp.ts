@@ -1,4 +1,5 @@
 import { OrderHeader, OrderItem } from '@/hooks/use-order'
+import { formatCnpj } from './utils'
 
 /**
  * Cliente para o microsserviço "zalike-erp-bridge" (pasta server/ na raiz
@@ -66,7 +67,8 @@ async function erpFetch<T>(path: string, params: Record<string, string>): Promis
 }
 
 export function lookupCliente(cnpj: string): Promise<ClienteLookupResult | null> {
-  return erpFetch<ClienteLookupResult>('/cliente', { cnpj })
+  const maskedCnpj = formatCnpj(cnpj)
+  return erpFetch<ClienteLookupResult>('/cliente', { cnpj: maskedCnpj })
 }
 
 export function lookupProduto(
@@ -82,13 +84,23 @@ export function lookupProduto(
  * Nunca sobrescreve um valor que o usuário já tenha digitado manualmente.
  */
 export async function enrichHeaderFromCnpj(header: OrderHeader): Promise<OrderHeader> {
-  if (!header.cnpj.trim()) return header
+  const formattedCnpj = formatCnpj(header.cnpj)
+  if (!formattedCnpj) {
+    return header
+  }
 
-  const result = await lookupCliente(header.cnpj.trim())
-  if (!result) return header
+  const result = await lookupCliente(formattedCnpj)
+  if (!result) {
+    // Mesmo sem match no ERP, garante que o header fique com o CNPJ devidamente mascarado
+    return {
+      ...header,
+      cnpj: formattedCnpj,
+    }
+  }
 
   return {
     ...header,
+    cnpj: formattedCnpj,
     idCliente: result.idCliente,
     repCode: header.repCode.trim() ? header.repCode : result.repCode,
     paymentCode: header.paymentCode.trim() ? header.paymentCode : result.formaPagtoCodigo,

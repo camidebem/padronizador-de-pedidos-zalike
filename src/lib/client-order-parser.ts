@@ -1,4 +1,5 @@
 import { ExtractedOrder } from './extractor-types'
+import { formatCnpj } from './utils'
 
 /**
  * Robust client-side regex parsing as immediate fallback or primary parser
@@ -190,7 +191,7 @@ function parseSingleOrderBlock(
     isOcr,
     rawText: block,
     header: {
-      cnpj,
+      cnpj: formatCnpj(cnpj),
       repCode: '',
       paymentCode: '',
       paymentDesc: '',

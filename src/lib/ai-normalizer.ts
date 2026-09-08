@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import { ExtractedOrder } from './extractor-types'
+import { formatCnpj } from './utils'
 
 export interface AiNormalizeResponse {
   ok: boolean
@@ -33,7 +34,7 @@ export async function normalizeTextWithAi(
   isOcr = false,
 ): Promise<ExtractedOrder[]> {
   const backendUrl = import.meta.env.VITE_POCKETBASE_URL || ''
-  const endpoint = `${backendUrl.replace(/\/+$/, '')}/api/zalike/normalize-order`
+  const endpoint = `${backendUrl.replace(/\/+$/, '')}/backend/v1/zalike/normalize-order`
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -76,8 +77,8 @@ export async function normalizeTextWithAi(
 
   return data.orders.map((o, idx) => {
     const rawCnpj = o.header?.cnpj || ''
-    // Normalize CNPJ: keep digits or standard format
-    const cleanCnpj = rawCnpj.trim()
+    // Normalize CNPJ to standard XX.XXX.XXX/XXXX-XX format
+    const formattedCnpj = formatCnpj(rawCnpj)
 
     const mappedItems = (o.items || []).map((it) => ({
       id: crypto.randomUUID(),
@@ -96,7 +97,7 @@ export async function normalizeTextWithAi(
       rawText: rawText,
       warning: isOcr ? 'Texto obtido via OCR: verifique os códigos e quantidades.' : undefined,
       header: {
-        cnpj: cleanCnpj,
+        cnpj: formattedCnpj,
         repCode: '',
         paymentCode: '',
         paymentDesc: '',

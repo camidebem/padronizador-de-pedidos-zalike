@@ -1,4 +1,4 @@
-routerAdd('POST', '/api/zalike/normalize-order', (e) => {
+routerAdd('POST', '/backend/v1/zalike/normalize-order', (e) => {
   try {
     const body = e.requestInfo().body || {}
     const rawText = (body.text || '').trim()
@@ -63,9 +63,27 @@ routerAdd('POST', '/api/zalike/normalize-order', (e) => {
       })
     }
 
+    // Helper para formatar CNPJ XX.XXX.XXX/XXXX-XX no backend se vier apenas números
+    const formatCnpjBackend = (val) => {
+      if (!val) return ''
+      const s = String(val).trim()
+      const d = s.replace(/\D/g, '')
+      if (d.length === 14) {
+        return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+      }
+      return s
+    }
+
+    const normalizedOrders = (parsed.orders || []).map((ord) => {
+      if (ord && ord.header && ord.header.cnpj) {
+        ord.header.cnpj = formatCnpjBackend(ord.header.cnpj)
+      }
+      return ord
+    })
+
     return e.json(200, {
       ok: true,
-      orders: parsed.orders || [],
+      orders: normalizedOrders,
       rawContent: result.content,
     })
   } catch (err) {

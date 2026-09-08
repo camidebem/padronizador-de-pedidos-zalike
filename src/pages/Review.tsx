@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useOrder, OrderHeader, OrderItem } from '@/hooks/use-order'
 import { useToast } from '@/hooks/use-toast'
 import { generateCSV } from '@/lib/csv'
+import { formatCnpj } from '@/lib/utils'
 import { markOrderAsProcessed } from '@/lib/order-storage'
 import { Button } from '@/components/ui/button'
 import { ReviewHeaderForm } from '@/components/ReviewHeaderForm'
@@ -25,7 +26,7 @@ export default function Review() {
       navigate('/dashboard')
     } else {
       setLocalHeader({
-        cnpj: String(header?.cnpj || ''),
+        cnpj: formatCnpj(String(header?.cnpj || '')),
         repCode: String(header?.repCode || ''),
         paymentCode: String(header?.paymentCode || ''),
         paymentDesc: String(header?.paymentDesc || ''),

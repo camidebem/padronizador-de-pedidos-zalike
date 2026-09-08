@@ -23,6 +23,7 @@ import { useOrder } from '@/hooks/use-order'
 import { processFilePipeline } from '@/lib/pipeline'
 import { ExtractedOrder, ExtractionResult } from '@/lib/extractor-types'
 import { enrichHeaderFromCnpj, enrichItemsWithIdCliente } from '@/lib/erp'
+import { formatCnpj } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import {
   loadActiveExtraction,
@@ -134,8 +135,13 @@ export default function Dashboard() {
     setIsProcessing(true)
     setProcessingStatus(`Carregando pedido ${order.orderNumber || ''}...`)
 
+    const normalizedHeader = {
+      ...order.header,
+      cnpj: formatCnpj(order.header.cnpj),
+    }
+
     try {
-      const enrichedHeader = await enrichHeaderFromCnpj(order.header)
+      const enrichedHeader = await enrichHeaderFromCnpj(normalizedHeader)
       const enrichedItems = await enrichItemsWithIdCliente(order.items, enrichedHeader.idCliente)
 
       setHeader(enrichedHeader)
@@ -173,7 +179,7 @@ export default function Dashboard() {
       navigate('/review')
     } catch (err) {
       console.warn('[erp] Erro ao enriquecer pedido:', err)
-      setHeader(order.header)
+      setHeader(normalizedHeader)
       setItems(order.items)
       if (setRawText) setRawText(order.rawText || '')
       if (setCurrentOrderId) setCurrentOrderId(order.id)
@@ -288,10 +294,18 @@ export default function Dashboard() {
               .filter((ord, idx) => {
                 if (!searchTerm.trim()) return true
                 const query = searchTerm.toLowerCase().trim()
+                const queryDigits = query.replace(/\D/g, '')
                 const orderNum = (ord.orderNumber || `Pedido #${idx + 1}`).toLowerCase()
-                const cnpj = (ord.header.cnpj || '').toLowerCase()
+                const cnpjRaw = (ord.header.cnpj || '').toLowerCase()
+                const cnpjFormatted = formatCnpj(ord.header.cnpj).toLowerCase()
                 const store = (ord.customerName || '').toLowerCase()
-                return orderNum.includes(query) || cnpj.includes(query) || store.includes(query)
+
+                const matchCnpj =
+                  cnpjRaw.includes(query) ||
+                  cnpjFormatted.includes(query) ||
+                  (queryDigits.length > 3 && cnpjRaw.replace(/\D/g, '').includes(queryDigits))
+
+                return orderNum.includes(query) || matchCnpj || store.includes(query)
               })
               .map((ord, idx) => {
                 const isAlreadyProcessed = processedOrderIds.has(ord.id)
@@ -343,7 +357,7 @@ export default function Dashboard() {
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-slate-400 font-mono">CNPJ:</span>
                             <span className="font-mono text-xs text-slate-700">
-                              {ord.header.cnpj || 'Não informado'}
+                              {ord.header.cnpj ? formatCnpj(ord.header.cnpj) : 'Não informado'}
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
