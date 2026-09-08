@@ -16,11 +16,14 @@ export async function extractFromExcel(file: File): Promise<ExtractedOrder> {
   }
 
   const worksheet = workbook.Sheets[firstSheetName]
-  const rows: Array<Array<string | number | undefined | null>> = XLSX.utils.sheet_to_json(worksheet, {
-    header: 1,
-    defval: '',
-    blankrows: false,
-  })
+  const rows: Array<Array<string | number | undefined | null>> = XLSX.utils.sheet_to_json(
+    worksheet,
+    {
+      header: 1,
+      defval: '',
+      blankrows: false,
+    },
+  )
 
   if (rows.length === 0) {
     throw new Error('Nenhum dado encontrado na planilha.')
@@ -39,10 +42,19 @@ export async function extractFromExcel(file: File): Promise<ExtractedOrder> {
     const row = rows[i]
     if (!Array.isArray(row)) continue
 
-    const rowStrings = row.map((cell) => String(cell || '').trim().toLowerCase())
+    const rowStrings = row.map((cell) =>
+      String(cell || '')
+        .trim()
+        .toLowerCase(),
+    )
 
-    const eanIdx = rowStrings.findIndex((c) => c === 'ean' || c.includes('barras') || c.includes('cod.barras') || c.includes('cód.barras'))
-    const qtyIdx = rowStrings.findIndex((c) => c === 'qtd' || c === 'quantidade' || c.includes('qtde') || c.includes('quant'))
+    const eanIdx = rowStrings.findIndex(
+      (c) =>
+        c === 'ean' || c.includes('barras') || c.includes('cod.barras') || c.includes('cód.barras'),
+    )
+    const qtyIdx = rowStrings.findIndex(
+      (c) => c === 'qtd' || c === 'quantidade' || c.includes('qtde') || c.includes('quant'),
+    )
 
     if (eanIdx !== -1 && qtyIdx !== -1) {
       headerIndex = i
@@ -50,10 +62,25 @@ export async function extractFromExcel(file: File): Promise<ExtractedOrder> {
       colQty = qtyIdx
 
       // Search other columns
-      colRef = rowStrings.findIndex((c, idx) => idx !== eanIdx && idx !== qtyIdx && (c === 'referência' || c === 'referencia' || c.includes('ref') || c === 'column_3'))
-      colDesc = rowStrings.findIndex((c, idx) => idx !== eanIdx && idx !== qtyIdx && (c.includes('descri') || c === 'produto'))
-      colStore = rowStrings.findIndex((c, idx) => idx !== eanIdx && idx !== qtyIdx && (c.includes('loja') || c.includes('cliente')))
-      colItemCode = rowStrings.findIndex((c, idx) => idx !== eanIdx && idx !== qtyIdx && (c.includes('código') || c.includes('codigo') || c.includes('cod')))
+      colRef = rowStrings.findIndex(
+        (c, idx) =>
+          idx !== eanIdx &&
+          idx !== qtyIdx &&
+          (c === 'referência' || c === 'referencia' || c.includes('ref') || c === 'column_3'),
+      )
+      colDesc = rowStrings.findIndex(
+        (c, idx) => idx !== eanIdx && idx !== qtyIdx && (c.includes('descri') || c === 'produto'),
+      )
+      colStore = rowStrings.findIndex(
+        (c, idx) =>
+          idx !== eanIdx && idx !== qtyIdx && (c.includes('loja') || c.includes('cliente')),
+      )
+      colItemCode = rowStrings.findIndex(
+        (c, idx) =>
+          idx !== eanIdx &&
+          idx !== qtyIdx &&
+          (c.includes('código') || c.includes('codigo') || c.includes('cod')),
+      )
       break
     }
   }
@@ -94,7 +121,8 @@ export async function extractFromExcel(file: File): Promise<ExtractedOrder> {
     const qtyRaw = colQty !== -1 ? String(row[colQty] || '').trim() : ''
     const refRaw = colRef !== -1 ? String(row[colRef] || '').trim() : ''
     const descRaw = colDesc !== -1 ? String(row[colDesc] || '').trim() : ''
-    const itemCodeRaw = colItemCode !== -1 && colItemCode !== colEan ? String(row[colItemCode] || '').trim() : ''
+    const itemCodeRaw =
+      colItemCode !== -1 && colItemCode !== colEan ? String(row[colItemCode] || '').trim() : ''
 
     if (colStore !== -1 && String(row[colStore] || '').trim() && !storeContext) {
       storeContext = String(row[colStore] || '').trim()

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   UploadCloud,
@@ -12,10 +12,13 @@ import {
   Hash,
   ShoppingBag,
   RotateCcw,
+  CheckCircle2,
+  Search,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { useOrder } from '@/hooks/use-order'
 import { processFilePipeline } from '@/lib/pipeline'
 import { ExtractedOrder, ExtractionResult } from '@/lib/extractor-types'
@@ -28,11 +31,28 @@ export default function Dashboard() {
   const [processingStatus, setProcessingStatus] = useState<string>('')
   const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null)
   const [processedOrderIds, setProcessedOrderIds] = useState<Set<string>>(new Set())
+  const [searchTerm, setSearchTerm] = useState('')
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
-  const { setHeader, setItems, setRawText } = useOrder()
+  const { setHeader, setItems, setRawText, setCurrentOrderId, setCurrentOrderNumber } = useOrder()
   const { toast } = useToast()
+
+  // Restore state from sessionStorage if user navigates back from review
+  useEffect(() => {
+    try {
+      const savedResult = sessionStorage.getItem('zalike_active_extraction')
+      if (savedResult) {
+        setExtractionResult(JSON.parse(savedResult))
+      }
+      const savedProcessed = sessionStorage.getItem('zalike_processed_orders')
+      if (savedProcessed) {
+        setProcessedOrderIds(new Set(JSON.parse(savedProcessed)))
+      }
+    } catch {
+      /* intentionally ignored */
+    }
+  }, [])
 
   const handleFile = async (file: File) => {
     const isValidType =
@@ -71,13 +91,25 @@ export default function Dashboard() {
       // If exactly 1 order, enrich and go straight to review
       if (result.orders.length === 1) {
         const singleOrder = result.orders[0]
+        try {
+          sessionStorage.removeItem('zalike_active_extraction')
+          sessionStorage.removeItem('zalike_processed_orders')
+        } catch {
+          /* intentionally ignored */
+        }
         await proceedToReview(singleOrder)
       } else {
-        // Multiple orders detected: show multi-order selection screen
+        // Multiple orders detected: save in sessionStorage and show multi-order selection screen
         setExtractionResult(result)
+        try {
+          sessionStorage.setItem('zalike_active_extraction', JSON.stringify(result))
+          sessionStorage.setItem('zalike_processed_orders', JSON.stringify([]))
+        } catch {
+          /* intentionally ignored */
+        }
         toast({
-          title: `${result.orders.length} pedidos detectados`,
-          description: 'Selecione abaixo qual pedido deseja revisar e exportar.',
+          title: `${result.orders.length} pedidos detectados no arquivo`,
+          description: 'Cada pedido foi isolado individualmente. Escolha qual revisar e exportar.',
         })
       }
     } catch (error) {
@@ -85,7 +117,10 @@ export default function Dashboard() {
       toast({
         variant: 'destructive',
         title: 'Erro no processamento',
-        description: error instanceof Error ? error.message : 'Não foi possível ler o arquivo. Tente novamente.',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível ler o arquivo. Tente novamente.',
       })
     } finally {
       setIsProcessing(false)
@@ -95,7 +130,7 @@ export default function Dashboard() {
 
   const proceedToReview = async (order: ExtractedOrder) => {
     setIsProcessing(true)
-    setProcessingStatus('Consultando cliente e produtos no ERP...')
+    setProcessingStatus(`Carregando pedido ${order.orderNumber || ''}...`)
 
     try {
       const enrichedHeader = await enrichHeaderFromCnpj(order.header)
@@ -106,19 +141,30 @@ export default function Dashboard() {
       if (setRawText) {
         setRawText(order.rawText || '')
       }
+      if (setCurrentOrderId) {
+        setCurrentOrderId(order.id)
+      }
+      if (setCurrentOrderNumber) {
+        setCurrentOrderNumber(order.orderNumber || '')
+      }
 
-      setProcessedOrderIds((prev) => new Set(prev).add(order.id))
-
-      if (order.isOcr) {
+      if (order.isOcr || order.confidence === 'low') {
         toast({
           variant: 'destructive',
-          title: 'Atenção: Extração por OCR',
-          description: 'Documento escaneado. Revise atentamente quantidades e códigos.',
+          title: 'Atenção: Extração de baixa confiança',
+          description:
+            'Revise atentamente os códigos e quantidades. O texto original está disponível na tela.',
+        })
+      } else if (order.items.length === 0) {
+        toast({
+          variant: 'destructive',
+          title: 'Pedido sem itens automáticos',
+          description: 'Insira os itens manualmente com o apoio do texto original.',
         })
       } else {
         toast({
           title: 'Pedido pronto para revisão',
-          description: `Pedido ${order.orderNumber} carregado com sucesso.`,
+          description: `Pedido ${order.orderNumber} com ${order.items.length} itens carregado.`,
         })
       }
 
@@ -128,10 +174,24 @@ export default function Dashboard() {
       setHeader(order.header)
       setItems(order.items)
       if (setRawText) setRawText(order.rawText || '')
+      if (setCurrentOrderId) setCurrentOrderId(order.id)
+      if (setCurrentOrderNumber) setCurrentOrderNumber(order.orderNumber || '')
       navigate('/review')
     } finally {
       setIsProcessing(false)
       setProcessingStatus('')
+    }
+  }
+
+  const handleResetSession = () => {
+    setExtractionResult(null)
+    setProcessedOrderIds(new Set())
+    setSearchTerm('')
+    try {
+      sessionStorage.removeItem('zalike_active_extraction')
+      sessionStorage.removeItem('zalike_processed_orders')
+    } catch {
+      /* intentionally ignored */
     }
   }
 
@@ -173,17 +233,15 @@ export default function Dashboard() {
                 </h2>
               </div>
               <p className="text-sm text-blue-700 mt-1">
-                Arquivo: <span className="font-medium">{extractionResult.fileName}</span>. Cada pedido deve ser revisado e exportado individualmente.
+                Arquivo: <span className="font-medium">{extractionResult.fileName}</span>. Cada
+                pedido deve ser revisado e exportado individualmente.
               </p>
             </div>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                setExtractionResult(null)
-                setProcessedOrderIds(new Set())
-              }}
-              className="gap-1 text-slate-600"
+              onClick={handleResetSession}
+              className="gap-1 text-slate-600 shrink-0"
             >
               <RotateCcw className="w-4 h-4" /> Novo Arquivo
             </Button>
@@ -192,86 +250,134 @@ export default function Dashboard() {
           {extractionResult.warning && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
-              <p className="text-sm text-amber-800">{extractionResult.warning}</p>
+              <div>
+                <p className="text-sm font-medium text-amber-900">{extractionResult.warning}</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  Você pode abrir qualquer pedido e revisar ou editar os dados manualmente antes de
+                  aprovar.
+                </p>
+              </div>
             </div>
           )}
 
+          {/* Status summary & search filter */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 border rounded-lg">
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary" className="text-xs">
+                Total: {extractionResult.orders.length}
+              </Badge>
+              <Badge variant="outline" className="text-xs text-emerald-700 border-emerald-300">
+                <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-600 inline" />
+                Exportados: {processedOrderIds.size}
+              </Badge>
+              <Badge variant="outline" className="text-xs text-blue-700 border-blue-300">
+                Pendentes: {extractionResult.orders.length - processedOrderIds.size}
+              </Badge>
+            </div>
+
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                placeholder="Filtrar por pedido, CNPJ ou loja..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 h-8 text-xs"
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {extractionResult.orders.map((ord, idx) => {
-              const isAlreadyProcessed = processedOrderIds.has(ord.id)
-              return (
-                <Card
-                  key={ord.id}
-                  className={`border transition-all ${
-                    isAlreadyProcessed
-                      ? 'border-emerald-200 bg-emerald-50/40 opacity-80'
-                      : 'hover:border-primary/50 hover:shadow-sm'
-                  }`}
-                >
-                  <CardContent className="p-5 flex flex-col justify-between h-full">
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="font-mono text-xs">
-                            #{idx + 1}
-                          </Badge>
-                          <span className="font-semibold text-slate-900 flex items-center gap-1">
-                            <Hash className="w-3.5 h-3.5 text-slate-400" />
-                            {ord.orderNumber || `Pedido #${idx + 1}`}
-                          </span>
-                        </div>
-                        {isAlreadyProcessed ? (
-                          <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-xs">
-                            Exportado
-                          </Badge>
-                        ) : ord.confidence === 'low' ? (
-                          <Badge variant="secondary" className="text-amber-700 bg-amber-100 text-xs">
-                            Baixa Confiança
-                          </Badge>
-                        ) : null}
-                      </div>
-
-                      <div className="space-y-1.5 text-sm text-slate-600 my-3">
-                        {ord.customerName && (
+            {extractionResult.orders
+              .filter((ord, idx) => {
+                if (!searchTerm.trim()) return true
+                const query = searchTerm.toLowerCase().trim()
+                const orderNum = (ord.orderNumber || `Pedido #${idx + 1}`).toLowerCase()
+                const cnpj = (ord.header.cnpj || '').toLowerCase()
+                const store = (ord.customerName || '').toLowerCase()
+                return orderNum.includes(query) || cnpj.includes(query) || store.includes(query)
+              })
+              .map((ord, idx) => {
+                const isAlreadyProcessed = processedOrderIds.has(ord.id)
+                return (
+                  <Card
+                    key={ord.id}
+                    className={`border transition-all ${
+                      isAlreadyProcessed
+                        ? 'border-emerald-300 bg-emerald-50/30'
+                        : 'border-slate-200 hover:border-primary/50 hover:shadow-sm bg-white'
+                    }`}
+                  >
+                    <CardContent className="p-5 flex flex-col justify-between h-full">
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2">
-                            <Building className="w-4 h-4 text-slate-400 shrink-0" />
-                            <span className="truncate font-medium text-slate-800">{ord.customerName}</span>
+                            <Badge variant="outline" className="font-mono text-xs">
+                              #{idx + 1}
+                            </Badge>
+                            <span className="font-semibold text-slate-900 flex items-center gap-1">
+                              <Hash className="w-3.5 h-3.5 text-slate-400" />
+                              {ord.orderNumber || `Pedido #${idx + 1}`}
+                            </span>
                           </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-400 font-mono">CNPJ:</span>
-                          <span className="font-mono text-xs text-slate-700">
-                            {ord.header.cnpj || 'Não informado'}
-                          </span>
+                          {isAlreadyProcessed ? (
+                            <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-xs gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Exportado
+                            </Badge>
+                          ) : ord.confidence === 'low' || ord.isOcr ? (
+                            <Badge
+                              variant="secondary"
+                              className="text-amber-700 bg-amber-100 text-xs"
+                            >
+                              Baixa Confiança
+                            </Badge>
+                          ) : null}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <ShoppingBag className="w-4 h-4 text-slate-400 shrink-0" />
-                          <span>
-                            <strong className="text-slate-900">{ord.items.length}</strong>{' '}
-                            {ord.items.length === 1 ? 'item' : 'itens'} identificados
-                          </span>
+
+                        <div className="space-y-1.5 text-sm text-slate-600 my-3">
+                          {ord.customerName && (
+                            <div className="flex items-center gap-2">
+                              <Building className="w-4 h-4 text-slate-400 shrink-0" />
+                              <span className="truncate font-medium text-slate-800">
+                                {ord.customerName}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-400 font-mono">CNPJ:</span>
+                            <span className="font-mono text-xs text-slate-700">
+                              {ord.header.cnpj || 'Não informado'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <ShoppingBag className="w-4 h-4 text-slate-400 shrink-0" />
+                            <span>
+                              <strong className="text-slate-900">{ord.items.length}</strong>{' '}
+                              {ord.items.length === 1 ? 'item' : 'itens'} identificados
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="pt-4 border-t mt-2 flex items-center justify-between">
-                      <span className="text-xs text-slate-400">
-                        {ord.header.obs ? ord.header.obs.slice(0, 40) + '...' : ''}
-                      </span>
-                      <Button
-                        size="sm"
-                        disabled={isProcessing}
-                        onClick={() => proceedToReview(ord)}
-                        className="gap-1.5"
-                      >
-                        {isAlreadyProcessed ? 'Revisar novamente' : 'Revisar este Pedido'}
-                        <ArrowRight className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
+                      <div className="pt-4 border-t mt-2 flex items-center justify-between gap-2">
+                        <span className="text-xs text-slate-400 truncate max-w-[140px]">
+                          {ord.header.obs || ''}
+                        </span>
+                        <Button
+                          size="sm"
+                          disabled={isProcessing}
+                          onClick={() => proceedToReview(ord)}
+                          variant={isAlreadyProcessed ? 'outline' : 'default'}
+                          className="gap-1.5 shrink-0"
+                        >
+                          {isAlreadyProcessed ? 'Revisar novamente' : 'Revisar este Pedido'}
+                          <ArrowRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
           </div>
         </div>
       ) : (
@@ -294,7 +400,8 @@ export default function Dashboard() {
                     {processingStatus || 'Processando arquivo...'}
                   </h3>
                   <p className="text-slate-500 max-w-sm">
-                    Pipeline ativo: leitura client-side (PDF/XLSX), separação por pedido e normalização via IA.
+                    Pipeline ativo: leitura client-side (PDF/XLSX), separação por pedido e
+                    normalização via IA.
                   </p>
                 </div>
               ) : (

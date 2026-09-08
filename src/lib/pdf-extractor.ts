@@ -48,7 +48,11 @@ export async function extractPdfText(file: File): Promise<PdfRawExtraction> {
         const currentY = textItem.transform[5]
         if (lastY !== null && Math.abs(currentY - lastY) > 5) {
           strings.push('\n')
-        } else if (strings.length > 0 && !strings[strings.length - 1].endsWith(' ') && !strings[strings.length - 1].endsWith('\n')) {
+        } else if (
+          strings.length > 0 &&
+          !strings[strings.length - 1].endsWith(' ') &&
+          !strings[strings.length - 1].endsWith('\n')
+        ) {
           strings.push(' ')
         }
         strings.push(textItem.str)

@@ -13,17 +13,18 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { OrderItem } from '@/hooks/use-order'
 import { lookupProduto } from '@/lib/erp'
-import { Trash2, Package, Loader2 } from 'lucide-react'
+import { Trash2, Package, Loader2, Plus } from 'lucide-react'
 
 interface Props {
   items: OrderItem[]
   onChange: (id: string, field: keyof OrderItem, value: string) => void
   onRemove: (id: string) => void
+  onAdd?: () => void
   /** id_cliente resolvido no Fluxo 1 (CNPJ do header) — sem ele o Fluxo 2 não roda. */
   idCliente?: string | null
 }
 
-export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props) {
+export function ReviewItemsTable({ items, onChange, onRemove, onAdd, idCliente }: Props) {
   // Um item por vez em busca, para dar feedback visual sem estado global.
   const [lookingUpIds, setLookingUpIds] = useState<Set<string>>(new Set())
 
@@ -71,10 +72,21 @@ export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <Badge variant="secondary" className="font-medium bg-slate-100 text-slate-700">
               {items.filter((i) => i.itemCode.trim()).length}/{items.length} com código
             </Badge>
+            {onAdd && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onAdd}
+                className="gap-1 text-xs h-8"
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar Item
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>

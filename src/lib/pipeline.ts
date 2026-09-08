@@ -63,13 +63,14 @@ export async function processFilePipeline(
 
       for (let i = 0; i < pdfData.pages.length; i++) {
         const page = pdfData.pages[i]
-        onProgress?.(`Processando página ${i + 1} de ${pdfData.pages.length}...`)
+        const pct = Math.round(((i + 1) / pdfData.pages.length) * 100)
+        onProgress?.(`Processando página ${i + 1} de ${pdfData.pages.length} (${pct}%)...`, pct)
 
-        // Attempt client-side regex parsing for this page first
+        // Attempt client-side regex parsing for this page first (fast & offline)
         const clientParsed = parseOrdersClientSide(page.text, false)
         if (clientParsed.length > 0) {
           pageOrders.push(...clientParsed)
-        } else {
+        } else if (page.text.trim().length > 30) {
           // If regex found nothing but page has text, try AI on this page
           try {
             const aiParsed = await normalizeTextWithAi(page.text, false)
@@ -85,6 +86,7 @@ export async function processFilePipeline(
         }
       }
 
+      // If pageOrders is empty (e.g. multi-page scanned without digital text), fallback
       finalOrders = pageOrders
     } else {
       // Single page PDF or OCR text: try AI first, fallback to client-side regex
@@ -115,7 +117,9 @@ export async function processFilePipeline(
       totalOrders: finalOrders.length,
       isOcr,
       rawTextPreview: extractedText.slice(0, 500),
-      warning: isOcr ? 'Atenção: arquivo processado via OCR (baixa confiança). Confira os dados.' : undefined,
+      warning: isOcr
+        ? 'Atenção: arquivo processado via OCR (baixa confiança). Confira os dados.'
+        : undefined,
     }
   }
 
@@ -128,7 +132,8 @@ function createEmptyOrderWithRawText(rawText: string, orderNumber: string): Extr
     orderNumber,
     confidence: 'manual',
     rawText,
-    warning: 'Não foi possível extrair os itens automaticamente. Preencha manualmente ou confira o texto bruto.',
+    warning:
+      'Não foi possível extrair os itens automaticamente. Preencha manualmente ou confira o texto bruto.',
     header: {
       cnpj: '',
       repCode: '',

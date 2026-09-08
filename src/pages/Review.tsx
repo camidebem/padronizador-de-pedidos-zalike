@@ -10,7 +10,7 @@ import { CheckCircle, XCircle, FileText, ChevronDown, ChevronUp } from 'lucide-r
 
 export default function Review() {
   const navigate = useNavigate()
-  const { header, items, clearOrder, rawText } = useOrder()
+  const { header, items, clearOrder, rawText, currentOrderId, currentOrderNumber } = useOrder()
   const { toast } = useToast()
   const [showRawText, setShowRawText] = useState(false)
 
@@ -19,13 +19,23 @@ export default function Review() {
   const [localItems, setLocalItems] = useState<OrderItem[]>([])
 
   useEffect(() => {
-    if (!header || items.length === 0) {
+    // Note: if user came with raw text but 0 items (degraded OCR/empty manual flow), allow them to fill manually
+    if (!header && items.length === 0 && !rawText) {
       navigate('/dashboard')
     } else {
-      setLocalHeader(header)
+      setLocalHeader(
+        header || {
+          cnpj: '',
+          repCode: '',
+          paymentCode: '',
+          paymentDesc: '',
+          obs: '',
+          nature: 'Venda',
+        },
+      )
       setLocalItems(items)
     }
-  }, [header, items, navigate])
+  }, [header, items, navigate, rawText])
 
   if (!localHeader) return null
 
@@ -44,6 +54,17 @@ export default function Review() {
     navigate('/dashboard')
   }
 
+  const handleAddItem = () => {
+    const newItem: OrderItem = {
+      id: crypto.randomUUID(),
+      itemCode: '',
+      barcode: '',
+      reference: '',
+      qty: '1',
+    }
+    setLocalItems((prev) => [...prev, newItem])
+  }
+
   const handleApprove = () => {
     // Validation
     if (
@@ -60,6 +81,11 @@ export default function Review() {
       return
     }
 
+    if (localItems.length === 0) {
+      toast({ variant: 'destructive', description: 'O pedido precisa ter pelo menos um item.' })
+      return
+    }
+
     const hasEmptyItemCode = localItems.some((item) => !item.itemCode.trim())
     if (hasEmptyItemCode) {
       toast({
@@ -70,17 +96,27 @@ export default function Review() {
       return
     }
 
-    if (localItems.length === 0) {
-      toast({ variant: 'destructive', description: 'O pedido precisa ter pelo menos um item.' })
-      return
-    }
-
     // Success - generate file
     generateCSV(localHeader, localItems)
 
+    // Mark order as completed in session storage so dashboard preserves multi-order state
+    if (currentOrderId) {
+      try {
+        const stored = JSON.parse(sessionStorage.getItem('zalike_processed_orders') || '[]')
+        if (!stored.includes(currentOrderId)) {
+          sessionStorage.setItem(
+            'zalike_processed_orders',
+            JSON.stringify([...stored, currentOrderId]),
+          )
+        }
+      } catch {
+        /* intentionally ignored */
+      }
+    }
+
     toast({
       title: 'Exportação concluída',
-      description: 'O arquivo CSV foi gerado com sucesso.',
+      description: `O arquivo CSV do pedido ${currentOrderNumber || ''} foi gerado com sucesso.`,
     })
 
     clearOrder()
@@ -89,11 +125,23 @@ export default function Review() {
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in pb-24">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Revisão de Dados</h1>
-        <p className="text-slate-500 mt-2">
-          Valide as informações extraídas e preencha os dados faltantes antes de exportar.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900">Revisão de Dados</h1>
+            {currentOrderNumber && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                Pedido {currentOrderNumber}
+              </span>
+            )}
+          </div>
+          <p className="text-slate-500 mt-2">
+            Valide as informações extraídas e preencha os dados faltantes antes de exportar.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleCancel}>
+          Voltar para Lista de Pedidos
+        </Button>
       </div>
 
       {rawText && (
@@ -124,6 +172,7 @@ export default function Review() {
         items={localItems}
         onChange={handleItemChange}
         onRemove={handleRemoveItem}
+        onAdd={handleAddItem}
         idCliente={localHeader.idCliente}
       />
 

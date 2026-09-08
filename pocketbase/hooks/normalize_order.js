@@ -23,7 +23,9 @@ routerAdd('POST', '/api/zalike/normalize-order', (e) => {
       }
     }
 
-    const message = 'Por favor, processe e normalize o texto do pedido a seguir, retornando rigorosamente o JSON conforme instruído:\n\n' + rawText
+    const message =
+      'Por favor, processe e normalize o texto do pedido a seguir, retornando rigorosamente o JSON conforme instruído:\n\n' +
+      rawText
 
     const result = $ai.agent('extrator-pedidos').chat({
       user_id: userId,
@@ -50,14 +52,14 @@ routerAdd('POST', '/api/zalike/normalize-order', (e) => {
         ok: false,
         rawContent: result.content,
         orders: [],
-        warning: 'A IA retornou um formato não estruturado. Use o modo manual.'
+        warning: 'A IA retornou um formato não estruturado. Use o modo manual.',
       })
     }
 
     return e.json(200, {
       ok: true,
       orders: parsed.orders || [],
-      rawContent: result.content
+      rawContent: result.content,
     })
   } catch (err) {
     let msg = 'Erro ao consultar IA de normalização.'

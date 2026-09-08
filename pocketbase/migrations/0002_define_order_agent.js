@@ -1,9 +1,11 @@
-migrate((app) => {
-  $ai.agents.define(app, {
-    slug: "extrator-pedidos",
-    name: "Extrator de Pedidos Zalike",
-    description: "Interpreta texto bruto de pedidos de compra e normaliza para o schema estruturado Zalike.",
-    systemPrompt: `Você é um normalizador especialista de pedidos de compra e faturamento comercial para o sistema Zalike.
+migrate(
+  (app) => {
+    $ai.agents.define(app, {
+      slug: 'extrator-pedidos',
+      name: 'Extrator de Pedidos Zalike',
+      description:
+        'Interpreta texto bruto de pedidos de compra e normaliza para o schema estruturado Zalike.',
+      systemPrompt: `Você é um normalizador especialista de pedidos de compra e faturamento comercial para o sistema Zalike.
 Sua missão é extrair e estruturar dados de pedidos a partir de textos brutos originados de PDFs (pedidos de compra de redes/lojas, ordens de compra) ou planilhas.
 
 IMPORTANTE: O texto pode conter 1 ou mais pedidos (por exemplo, um PDF onde cada página ou bloco é um pedido diferente).
@@ -51,8 +53,10 @@ REGRAS DE RESPOSTA CRÍTICAS:
 }
 - Se o texto não contiver itens ou for ilegível, retorne {"orders": []}.
 - NUNCA invente itens ou CNPJs que não estejam presentes no texto bruto fornecido.`,
-    tier: "fast"
-  })
-}, (app) => {
-  $ai.agents.delete(app, "extrator-pedidos")
-})
+      tier: 'fast',
+    })
+  },
+  (app) => {
+    $ai.agents.delete(app, 'extrator-pedidos')
+  },
+)
