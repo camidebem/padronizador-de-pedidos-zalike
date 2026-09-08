@@ -4,7 +4,6 @@ import { UploadCloud, FileText, FileSpreadsheet, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { useOrder } from '@/hooks/use-order'
 import { processFile } from '@/lib/parser'
-import { enrichHeaderFromCnpj, enrichItemsWithIdCliente } from '@/lib/mysql-client'
 import { useToast } from '@/hooks/use-toast'
 
 export default function Dashboard() {
@@ -34,23 +33,14 @@ export default function Dashboard() {
     setIsProcessing(true)
     try {
       const data = await processFile(file)
-
-      // Fluxo 1 e 2 do preenchimento automático (MySQL externo via
-      // Supabase Edge Function 'mysql-lookup'): busca o cliente pelo CNPJ extraído
-      // e, com o idCliente resolvido, o código interno de cada item. Ambos
-      // degradam para os campos manuais existentes se a função não estiver
-      // configurada, o cliente/produto não for encontrado, ou houver erro/timeout.
-      const enrichedHeader = await enrichHeaderFromCnpj(data.header)
-      const enrichedItems = await enrichItemsWithIdCliente(data.items, enrichedHeader.idCliente)
-
-      setHeader(enrichedHeader)
-      setItems(enrichedItems)
+      setHeader(data.header)
+      setItems(data.items)
       toast({
         title: 'Sucesso',
         description: 'Dados extraídos com sucesso. Revise as informações.',
       })
       navigate('/review')
-    } catch (error) {
+    } catch {
       toast({
         variant: 'destructive',
         title: 'Erro no processamento',
