@@ -100,7 +100,6 @@ export default function Review() {
         items={localItems}
         onChange={handleItemChange}
         onRemove={handleRemoveItem}
-        idCliente={localHeader.idCliente}
       />
 
       {/* Floating Action Bar */}

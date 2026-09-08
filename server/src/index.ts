@@ -24,7 +24,9 @@ app.use(requireApiKey, produtoRouter)
 app.listen(port, () => {
   console.log(`[erp-bridge] ouvindo na porta ${port}`)
   if (!process.env.ALLOWED_ORIGIN) {
-    console.warn('[erp-bridge] ALLOWED_ORIGIN não configurado — CORS liberado para qualquer origem.')
+    console.warn(
+      '[erp-bridge] ALLOWED_ORIGIN não configurado — CORS liberado para qualquer origem.',
+    )
   }
 })
 

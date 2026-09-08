@@ -1,10 +1,8 @@
-import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { OrderHeader } from '@/hooks/use-order'
-import { enrichHeaderFromCnpj } from '@/lib/erp'
-import { Building2, Loader2 } from 'lucide-react'
+import { Building2 } from 'lucide-react'
 
 interface Props {
   header: OrderHeader
@@ -12,23 +10,8 @@ interface Props {
 }
 
 export function ReviewHeaderForm({ header, onChange }: Props) {
-  const [isLookingUpCnpj, setIsLookingUpCnpj] = useState(false)
-
   const handleChange = (field: keyof OrderHeader, value: string) => {
     onChange({ ...header, [field]: value })
-  }
-
-  // Re-dispara o Fluxo 1 quando o usuário edita o CNPJ manualmente na tela
-  // de revisão (ex.: corrigindo um valor extraído errado do PDF/Excel).
-  const handleCnpjBlur = async () => {
-    if (!header.cnpj.trim()) return
-    setIsLookingUpCnpj(true)
-    try {
-      const enriched = await enrichHeaderFromCnpj(header)
-      onChange(enriched)
-    } finally {
-      setIsLookingUpCnpj(false)
-    }
   }
 
   return (
@@ -43,15 +26,13 @@ export function ReviewHeaderForm({ header, onChange }: Props) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* CNPJ do Cliente */}
           <div className="space-y-2">
-            <Label htmlFor="cnpj" className="text-slate-600 font-medium flex items-center gap-2">
+            <Label htmlFor="cnpj" className="text-slate-600 font-medium">
               CNPJ do Cliente *
-              {isLookingUpCnpj && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />}
             </Label>
             <Input
               id="cnpj"
               value={header.cnpj}
               onChange={(e) => handleChange('cnpj', e.target.value)}
-              onBlur={handleCnpjBlur}
               placeholder="00.000.000/0000-00"
               className="font-medium"
             />

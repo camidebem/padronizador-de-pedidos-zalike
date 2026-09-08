@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import {
   Table,
   TableBody,
@@ -12,40 +11,15 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { OrderItem } from '@/hooks/use-order'
-import { lookupProduto } from '@/lib/erp'
-import { Trash2, Package, Loader2 } from 'lucide-react'
+import { Trash2, Package } from 'lucide-react'
 
 interface Props {
   items: OrderItem[]
   onChange: (id: string, field: keyof OrderItem, value: string) => void
   onRemove: (id: string) => void
-  /** id_cliente resolvido no Fluxo 1 (CNPJ do header) — sem ele o Fluxo 2 não roda. */
-  idCliente?: string | null
 }
 
-export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props) {
-  // Um item por vez em busca, para dar feedback visual sem estado global.
-  const [lookingUpIds, setLookingUpIds] = useState<Set<string>>(new Set())
-
-  // Re-dispara o Fluxo 2 quando o usuário edita EAN ou referência
-  // manualmente (ex.: corrigindo um valor extraído errado do arquivo).
-  // Nunca sobrescreve um Código Interno já preenchido.
-  const handleLookup = async (item: OrderItem, value: string) => {
-    if (!idCliente || !value.trim() || item.itemCode.trim()) return
-
-    setLookingUpIds((prev) => new Set(prev).add(item.id))
-    try {
-      const result = await lookupProduto(idCliente, value.trim())
-      if (result) onChange(item.id, 'itemCode', result.produtoCodigo)
-    } finally {
-      setLookingUpIds((prev) => {
-        const next = new Set(prev)
-        next.delete(item.id)
-        return next
-      })
-    }
-  }
-
+export function ReviewItemsTable({ items, onChange, onRemove }: Props) {
   if (items.length === 0) {
     return (
       <Card className="shadow-subtle border-slate-200">
@@ -56,6 +30,9 @@ export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props
       </Card>
     )
   }
+
+  const pendingCount = items.filter((i) => !i.itemCode.trim()).length
+  const completedCount = items.length - pendingCount
 
   return (
     <Card className="shadow-subtle border-slate-200 overflow-hidden">
@@ -71,11 +48,9 @@ export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="font-medium bg-slate-100 text-slate-700">
-              {items.filter((i) => i.itemCode.trim()).length}/{items.length} com código
-            </Badge>
-          </div>
+          <Badge variant="secondary" className="font-medium bg-slate-100 text-slate-700 w-fit">
+            {completedCount}/{items.length} com código
+          </Badge>
         </div>
       </CardHeader>
 
@@ -94,32 +69,25 @@ export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props
             <TableBody>
               {items.map((item) => {
                 const hasCode = Boolean(item.itemCode && item.itemCode.trim())
-                const isLookingUp = lookingUpIds.has(item.id)
 
                 return (
                   <TableRow key={item.id} className="hover:bg-slate-50/50 transition-colors">
                     <TableCell className="p-2">
-                      <div className="relative">
-                        <Input
-                          value={item.itemCode}
-                          onChange={(e) => onChange(item.id, 'itemCode', e.target.value)}
-                          placeholder="Ex: 9982"
-                          className={`h-9 font-medium ${
-                            !hasCode
-                              ? 'border-amber-300 bg-amber-50/30 placeholder:text-amber-700/50'
-                              : 'border-slate-300 focus-visible:ring-1 focus-visible:ring-primary'
-                          }`}
-                        />
-                        {isLookingUp && (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary absolute right-2 top-1/2 -translate-y-1/2" />
-                        )}
-                      </div>
+                      <Input
+                        value={item.itemCode}
+                        onChange={(e) => onChange(item.id, 'itemCode', e.target.value)}
+                        placeholder="Ex: 9982"
+                        className={`h-9 font-medium ${
+                          !hasCode
+                            ? 'border-amber-300 bg-amber-50/30 placeholder:text-amber-700/50'
+                            : 'border-slate-300 focus-visible:ring-1 focus-visible:ring-primary'
+                        }`}
+                      />
                     </TableCell>
                     <TableCell className="p-2">
                       <Input
                         value={item.barcode}
                         onChange={(e) => onChange(item.id, 'barcode', e.target.value)}
-                        onBlur={(e) => handleLookup(item, e.target.value)}
                         placeholder="EAN / Código de barras"
                         className="h-9 font-mono text-sm text-slate-600 bg-slate-50/70"
                       />
@@ -128,7 +96,6 @@ export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props
                       <Input
                         value={item.reference}
                         onChange={(e) => onChange(item.id, 'reference', e.target.value)}
-                        onBlur={(e) => handleLookup(item, e.target.value)}
                         placeholder="Ref. do Produto"
                         className="h-9 text-slate-600 bg-slate-50/70"
                       />
