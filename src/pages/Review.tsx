@@ -6,12 +6,13 @@ import { generateCSV } from '@/lib/csv'
 import { Button } from '@/components/ui/button'
 import { ReviewHeaderForm } from '@/components/ReviewHeaderForm'
 import { ReviewItemsTable } from '@/components/ReviewItemsTable'
-import { CheckCircle, XCircle } from 'lucide-react'
+import { CheckCircle, XCircle, FileText, ChevronDown, ChevronUp } from 'lucide-react'
 
 export default function Review() {
   const navigate = useNavigate()
-  const { header, items, clearOrder } = useOrder()
+  const { header, items, clearOrder, rawText } = useOrder()
   const { toast } = useToast()
+  const [showRawText, setShowRawText] = useState(false)
 
   // Local state for edits
   const [localHeader, setLocalHeader] = useState<OrderHeader | null>(null)
@@ -94,6 +95,29 @@ export default function Review() {
           Valide as informações extraídas e preencha os dados faltantes antes de exportar.
         </p>
       </div>
+
+      {rawText && (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+          <button
+            type="button"
+            onClick={() => setShowRawText(!showRawText)}
+            className="flex items-center justify-between w-full text-left text-sm font-medium text-slate-700 hover:text-slate-900"
+          >
+            <span className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-slate-500" />
+              Texto bruto extraído do arquivo (para conferência manual)
+            </span>
+            {showRawText ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          {showRawText && (
+            <div className="mt-3">
+              <pre className="max-h-60 overflow-y-auto p-3 bg-white border border-slate-200 rounded text-xs text-slate-700 font-mono whitespace-pre-wrap">
+                {rawText}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
 
       <ReviewHeaderForm header={localHeader} onChange={setLocalHeader} />
       <ReviewItemsTable

@@ -31,6 +31,8 @@ interface OrderContextType {
   updateHeader?: (newHeader: Partial<OrderHeader>) => void
   setItems: (items: OrderItem[]) => void
   clearOrder: () => void
+  rawText?: string
+  setRawText?: (text: string) => void
 }
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined)
@@ -38,6 +40,7 @@ const OrderContext = createContext<OrderContextType | undefined>(undefined)
 export function OrderProvider({ children }: { children: ReactNode }) {
   const [header, setHeader] = useState<OrderHeader | null>(null)
   const [items, setItems] = useState<OrderItem[]>([])
+  const [rawText, setRawText] = useState<string>('')
 
   const updateHeader = (newHeader: Partial<OrderHeader>) => {
     setHeader((prev) => (prev ? { ...prev, ...newHeader } : null))
@@ -46,6 +49,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const clearOrder = () => {
     setHeader(null)
     setItems([])
+    setRawText('')
   }
 
   return (
@@ -57,6 +61,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         updateHeader,
         setItems,
         clearOrder,
+        rawText,
+        setRawText,
       }}
     >
       {children}
