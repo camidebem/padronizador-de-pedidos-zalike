@@ -1,43 +1,163 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { OrderHeader } from '@/hooks/use-order'
-import { enrichHeaderFromCnpj } from '@/lib/erp'
-import { Building2, Loader2 } from 'lucide-react'
+import { buscarClientePorCNPJ } from '@/lib/mysql-client'
+import { Building2, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 
 interface Props {
   header: OrderHeader
   onChange: (header: OrderHeader) => void
 }
 
+type LookupStatus = 'idle' | 'loading' | 'found' | 'not_found' | 'error'
+
 export function ReviewHeaderForm({ header, onChange }: Props) {
-  const [isLookingUpCnpj, setIsLookingUpCnpj] = useState(false)
+  const [lookupStatus, setLookupStatus] = useState<LookupStatus>(
+    header.idCliente ? 'found' : 'idle',
+  )
+  const [clientInfo, setClientInfo] = useState<{
+    nome?: string
+    fantasia?: string
+  }>({})
+
+  // Referência para controlar o último CNPJ buscado e evitar buscas redundantes
+  const lastSearchedCnpj = useRef<string>(header.cnpj.replace(/\D/g, ''))
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const performLookup = async (rawCnpj: string) => {
+    const digits = rawCnpj.replace(/\D/g, '')
+    if (digits.length < 14) {
+      setLookupStatus('idle')
+      return
+    }
+
+    if (digits === lastSearchedCnpj.current && lookupStatus !== 'idle') {
+      return
+    }
+
+    lastSearchedCnpj.current = digits
+    setLookupStatus('loading')
+
+    try {
+      // 1 única tentativa com timeout via Edge Function
+      const data = await buscarClientePorCNPJ(rawCnpj)
+
+      if (data) {
+        setLookupStatus('found')
+        setClientInfo({
+          nome: data.nome,
+          fantasia: data.fantasia,
+        })
+
+        // Atualiza campos apenas se não foram preenchidos manualmente pelo usuário
+        onChange({
+          ...header,
+          cnpj: rawCnpj,
+          idCliente: data.id_cliente,
+          idConvenio: data.id_convenio,
+          repCode: header.repCode.trim() ? header.repCode : data.id_vendedor,
+          paymentCode: header.paymentCode.trim() ? header.paymentCode : data.forma_pagto_codigo,
+          paymentDesc: header.paymentDesc.trim() ? header.paymentDesc : data.forma_pagto_descricao,
+        })
+      } else {
+        setLookupStatus('not_found')
+        setClientInfo({})
+      }
+    } catch (err) {
+      console.warn('[ReviewHeaderForm] Erro ao buscar cliente por CNPJ:', err)
+      setLookupStatus('error')
+    }
+  }
+
+  // Monitora alterações no CNPJ com debounce de 600ms
+  const handleCnpjChange = (value: string) => {
+    onChange({ ...header, cnpj: value })
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+
+    const digits = value.replace(/\D/g, '')
+    if (digits.length >= 14) {
+      debounceTimerRef.current = setTimeout(() => {
+        performLookup(value)
+      }, 600)
+    } else {
+      setLookupStatus('idle')
+    }
+  }
+
+  // Caso o usuário saia do campo antes do debounce terminar
+  const handleCnpjBlur = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+    const digits = header.cnpj.replace(/\D/g, '')
+    if (digits.length >= 14 && digits !== lastSearchedCnpj.current) {
+      performLookup(header.cnpj)
+    }
+  }
+
+  useEffect(() => {
+    // Se o header já tiver CNPJ mas ainda não buscou (ex: importado do arquivo)
+    const digits = header.cnpj.replace(/\D/g, '')
+    if (digits.length >= 14 && !header.idCliente && lookupStatus === 'idle') {
+      performLookup(header.cnpj)
+    }
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    }
+  }, [header.cnpj])
 
   const handleChange = (field: keyof OrderHeader, value: string) => {
     onChange({ ...header, [field]: value })
   }
 
-  // Re-dispara o Fluxo 1 quando o usuário edita o CNPJ manualmente na tela
-  // de revisão (ex.: corrigindo um valor extraído errado do PDF/Excel).
-  const handleCnpjBlur = async () => {
-    if (!header.cnpj.trim()) return
-    setIsLookingUpCnpj(true)
-    try {
-      const enriched = await enrichHeaderFromCnpj(header)
-      onChange(enriched)
-    } finally {
-      setIsLookingUpCnpj(false)
-    }
-  }
-
   return (
     <Card className="shadow-subtle border-slate-200">
       <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
-        <CardTitle className="text-lg font-semibold flex items-center gap-2 text-slate-800">
-          <Building2 className="w-5 h-5 text-primary" />
-          Informações Gerais do Pedido
-        </CardTitle>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <CardTitle className="text-lg font-semibold flex items-center gap-2 text-slate-800">
+            <Building2 className="w-5 h-5 text-primary" />
+            Informações Gerais do Pedido
+          </CardTitle>
+
+          {lookupStatus === 'loading' && (
+            <Badge
+              variant="outline"
+              className="text-primary border-primary/30 flex items-center gap-1.5 w-fit"
+            >
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Buscando cliente no ERP...
+            </Badge>
+          )}
+
+          {lookupStatus === 'found' && (
+            <Badge
+              variant="outline"
+              className="text-emerald-700 bg-emerald-50 border-emerald-300 flex items-center gap-1.5 w-fit"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              Cliente localizado{' '}
+              {clientInfo.fantasia || clientInfo.nome
+                ? `(${clientInfo.fantasia || clientInfo.nome})`
+                : ''}
+            </Badge>
+          )}
+
+          {lookupStatus === 'not_found' && (
+            <Badge
+              variant="outline"
+              className="text-amber-700 bg-amber-50 border-amber-300 flex items-center gap-1.5 w-fit"
+            >
+              <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+              CNPJ não encontrado na base
+            </Badge>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="pt-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -45,15 +165,19 @@ export function ReviewHeaderForm({ header, onChange }: Props) {
           <div className="space-y-2">
             <Label htmlFor="cnpj" className="text-slate-600 font-medium flex items-center gap-2">
               CNPJ do Cliente *
-              {isLookingUpCnpj && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />}
+              {lookupStatus === 'loading' && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+              )}
             </Label>
             <Input
               id="cnpj"
               value={header.cnpj}
-              onChange={(e) => handleChange('cnpj', e.target.value)}
+              onChange={(e) => handleCnpjChange(e.target.value)}
               onBlur={handleCnpjBlur}
               placeholder="00.000.000/0000-00"
-              className="font-medium"
+              className={`font-medium ${
+                lookupStatus === 'found' ? 'border-emerald-300 focus-visible:ring-emerald-400' : ''
+              }`}
             />
           </div>
 

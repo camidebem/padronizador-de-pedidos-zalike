@@ -4,7 +4,7 @@ import { UploadCloud, FileText, FileSpreadsheet, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { useOrder } from '@/hooks/use-order'
 import { processFile } from '@/lib/parser'
-import { enrichHeaderFromCnpj, enrichItemsWithIdCliente } from '@/lib/erp'
+import { enrichHeaderFromCnpj, enrichItemsWithIdCliente } from '@/lib/mysql-client'
 import { useToast } from '@/hooks/use-toast'
 
 export default function Dashboard() {
@@ -36,11 +36,10 @@ export default function Dashboard() {
       const data = await processFile(file)
 
       // Fluxo 1 e 2 do preenchimento automático (MySQL externo via
-      // zalike-erp-bridge): busca o cliente pelo CNPJ extraído e, com o
-      // idCliente resolvido, o código interno de cada item. Ambos
-      // degradam para os campos manuais existentes se o bridge não
-      // estiver configurado, o cliente/produto não for encontrado, ou o
-      // banco externo estiver indisponível.
+      // Supabase Edge Function 'mysql-lookup'): busca o cliente pelo CNPJ extraído
+      // e, com o idCliente resolvido, o código interno de cada item. Ambos
+      // degradam para os campos manuais existentes se a função não estiver
+      // configurada, o cliente/produto não for encontrado, ou houver erro/timeout.
       const enrichedHeader = await enrichHeaderFromCnpj(data.header)
       const enrichedItems = await enrichItemsWithIdCliente(data.items, enrichedHeader.idCliente)
 

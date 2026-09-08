@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { OrderItem } from '@/hooks/use-order'
-import { lookupProduto } from '@/lib/erp'
-import { Trash2, Package, Loader2 } from 'lucide-react'
+import { buscarProdutoPorCodigo } from '@/lib/mysql-client'
+import { Trash2, Package, Loader2, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react'
 
 interface Props {
   items: OrderItem[]
@@ -23,20 +23,37 @@ interface Props {
   idCliente?: string | null
 }
 
-export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props) {
-  // Um item por vez em busca, para dar feedback visual sem estado global.
-  const [lookingUpIds, setLookingUpIds] = useState<Set<string>>(new Set())
+type ItemLookupStatus = 'idle' | 'loading' | 'found' | 'not_found'
 
-  // Re-dispara o Fluxo 2 quando o usuário edita EAN ou referência
-  // manualmente (ex.: corrigindo um valor extraído errado do arquivo).
-  // Nunca sobrescreve um Código Interno já preenchido.
+export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props) {
+  // Rastreia itens em busca individual
+  const [lookingUpIds, setLookingUpIds] = useState<Set<string>>(new Set())
+  // Rastreia status de busca recente por item para feedback visual
+  const [itemStatuses, setItemStatuses] = useState<Record<string, ItemLookupStatus>>({})
+  // Rastreia busca em lote "Buscar todos pendentes"
+  const [isBulkLookingUp, setIsBulkLookingUp] = useState(false)
+
+  // Re-dispara o Fluxo 2 quando o usuário edita EAN ou referência manualmente
+  // ao sair do campo (onBlur). Nunca sobrescreve um Código Interno já preenchido.
   const handleLookup = async (item: OrderItem, value: string) => {
-    if (!idCliente || !value.trim() || item.itemCode.trim()) return
+    const cleanValue = value.trim()
+    if (!idCliente || !cleanValue || (item.itemCode && item.itemCode.trim())) {
+      return
+    }
 
     setLookingUpIds((prev) => new Set(prev).add(item.id))
+    setItemStatuses((prev) => ({ ...prev, [item.id]: 'loading' }))
+
     try {
-      const result = await lookupProduto(idCliente, value.trim())
-      if (result) onChange(item.id, 'itemCode', result.produtoCodigo)
+      const result = await buscarProdutoPorCodigo(idCliente, cleanValue)
+      if (result && result.produto_codigo) {
+        onChange(item.id, 'itemCode', result.produto_codigo)
+        setItemStatuses((prev) => ({ ...prev, [item.id]: 'found' }))
+      } else {
+        setItemStatuses((prev) => ({ ...prev, [item.id]: 'not_found' }))
+      }
+    } catch {
+      setItemStatuses((prev) => ({ ...prev, [item.id]: 'not_found' }))
     } finally {
       setLookingUpIds((prev) => {
         const next = new Set(prev)
@@ -44,6 +61,47 @@ export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props
         return next
       })
     }
+  }
+
+  // Busca todos os itens que ainda não têm Código Interno preenchido
+  const handleBulkLookup = async () => {
+    if (!idCliente || isBulkLookingUp) return
+
+    const pendingItems = items.filter(
+      (item) => !item.itemCode.trim() && (item.barcode.trim() || item.reference.trim()),
+    )
+    if (pendingItems.length === 0) return
+
+    setIsBulkLookingUp(true)
+
+    // Processa os pendentes em paralelo (uma única tentativa cada, sem retry loop)
+    await Promise.all(
+      pendingItems.map(async (item) => {
+        const queryVal = item.barcode.trim() || item.reference.trim()
+        setLookingUpIds((prev) => new Set(prev).add(item.id))
+        setItemStatuses((prev) => ({ ...prev, [item.id]: 'loading' }))
+
+        try {
+          const result = await buscarProdutoPorCodigo(idCliente, queryVal)
+          if (result && result.produto_codigo) {
+            onChange(item.id, 'itemCode', result.produto_codigo)
+            setItemStatuses((prev) => ({ ...prev, [item.id]: 'found' }))
+          } else {
+            setItemStatuses((prev) => ({ ...prev, [item.id]: 'not_found' }))
+          }
+        } catch {
+          setItemStatuses((prev) => ({ ...prev, [item.id]: 'not_found' }))
+        } finally {
+          setLookingUpIds((prev) => {
+            const next = new Set(prev)
+            next.delete(item.id)
+            return next
+          })
+        }
+      }),
+    )
+
+    setIsBulkLookingUp(false)
   }
 
   if (items.length === 0) {
@@ -56,6 +114,9 @@ export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props
       </Card>
     )
   }
+
+  const pendingCount = items.filter((i) => !i.itemCode.trim()).length
+  const completedCount = items.length - pendingCount
 
   return (
     <Card className="shadow-subtle border-slate-200 overflow-hidden">
@@ -71,10 +132,33 @@ export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="secondary" className="font-medium bg-slate-100 text-slate-700">
-              {items.filter((i) => i.itemCode.trim()).length}/{items.length} com código
+              {completedCount}/{items.length} com código
             </Badge>
+
+            {pendingCount > 0 && idCliente && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleBulkLookup}
+                disabled={isBulkLookingUp}
+                className="text-xs bg-white hover:bg-slate-50 border-primary/30 text-primary hover:text-primary h-8 gap-1.5 shadow-none"
+              >
+                {isBulkLookingUp ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Consultando itens...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Buscar todos pendentes ({pendingCount})
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -95,24 +179,36 @@ export function ReviewItemsTable({ items, onChange, onRemove, idCliente }: Props
               {items.map((item) => {
                 const hasCode = Boolean(item.itemCode && item.itemCode.trim())
                 const isLookingUp = lookingUpIds.has(item.id)
+                const status = itemStatuses[item.id]
 
                 return (
                   <TableRow key={item.id} className="hover:bg-slate-50/50 transition-colors">
                     <TableCell className="p-2">
-                      <div className="relative">
+                      <div className="relative flex items-center">
                         <Input
                           value={item.itemCode}
-                          onChange={(e) => onChange(item.id, 'itemCode', e.target.value)}
+                          onChange={(e) => {
+                            onChange(item.id, 'itemCode', e.target.value)
+                            setItemStatuses((prev) => ({ ...prev, [item.id]: 'idle' }))
+                          }}
                           placeholder="Ex: 9982"
-                          className={`h-9 font-medium ${
+                          className={`h-9 font-medium pr-8 ${
                             !hasCode
                               ? 'border-amber-300 bg-amber-50/30 placeholder:text-amber-700/50'
                               : 'border-slate-300 focus-visible:ring-1 focus-visible:ring-primary'
                           }`}
                         />
-                        {isLookingUp && (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary absolute right-2 top-1/2 -translate-y-1/2" />
-                        )}
+                        <div className="absolute right-2 flex items-center pointer-events-none">
+                          {isLookingUp && (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                          )}
+                          {!isLookingUp && status === 'found' && (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                          )}
+                          {!isLookingUp && status === 'not_found' && !hasCode && (
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="p-2">

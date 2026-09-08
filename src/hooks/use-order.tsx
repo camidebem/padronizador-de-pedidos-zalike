@@ -14,6 +14,7 @@ export interface OrderHeader {
    * enquanto o CNPJ não for encontrado na base ou não tiver sido buscado.
    */
   idCliente?: string | null
+  idConvenio?: string | null
 }
 
 export interface OrderItem {
