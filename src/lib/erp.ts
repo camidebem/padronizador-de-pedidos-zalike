@@ -25,7 +25,9 @@ export interface ProdutoLookupResult {
 }
 
 function getApiBase(): string | undefined {
-  return import.meta.env.VITE_ERP_API_URL as string | undefined
+  const url = import.meta.env.VITE_ERP_API_URL as string | undefined
+  if (!url) return undefined
+  return url.replace(/\/+$/, '')
 }
 
 async function erpFetch<T>(path: string, params: Record<string, string>): Promise<T | null> {
@@ -50,7 +52,9 @@ async function erpFetch<T>(path: string, params: Record<string, string>): Promis
     if (response.status === 404) return null
 
     if (!response.ok) {
-      console.warn(`[erp] ${path} respondeu ${response.status} — seguindo com preenchimento manual.`)
+      console.warn(
+        `[erp] ${path} respondeu ${response.status} — seguindo com preenchimento manual.`,
+      )
       return null
     }
 
@@ -65,7 +69,10 @@ export function lookupCliente(cnpj: string): Promise<ClienteLookupResult | null>
   return erpFetch<ClienteLookupResult>('/cliente', { cnpj })
 }
 
-export function lookupProduto(idCliente: string, valor: string): Promise<ProdutoLookupResult | null> {
+export function lookupProduto(
+  idCliente: string,
+  valor: string,
+): Promise<ProdutoLookupResult | null> {
   return erpFetch<ProdutoLookupResult>('/produto', { idCliente, valor })
 }
 
