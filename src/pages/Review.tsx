@@ -2,13 +2,20 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOrder, OrderHeader, OrderItem } from '@/hooks/use-order'
 import { useToast } from '@/hooks/use-toast'
-import { generateCSV } from '@/lib/csv'
+import { generateExcel } from '@/lib/excel-export'
 import { formatCnpj } from '@/lib/utils'
 import { markOrderAsProcessed } from '@/lib/order-storage'
 import { Button } from '@/components/ui/button'
 import { ReviewHeaderForm } from '@/components/ReviewHeaderForm'
 import { ReviewItemsTable } from '@/components/ReviewItemsTable'
-import { CheckCircle, XCircle, FileText, ChevronDown, ChevronUp } from 'lucide-react'
+import {
+  CheckCircle,
+  XCircle,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  FileSpreadsheet,
+} from 'lucide-react'
 
 export default function Review() {
   const navigate = useNavigate()
@@ -97,8 +104,8 @@ export default function Review() {
       return
     }
 
-    // Success - generate file
-    generateCSV(localHeader, localItems)
+    // Success - generate file (.xlsx)
+    generateExcel(localHeader, localItems)
 
     // Mark order as completed in session storage so dashboard preserves multi-order state
     if (currentOrderId) {
@@ -111,7 +118,7 @@ export default function Review() {
 
     toast({
       title: 'Exportação concluída',
-      description: `O arquivo CSV do pedido ${currentOrderNumber || ''} foi gerado com sucesso.`,
+      description: `O arquivo Excel (.xlsx) do pedido ${currentOrderNumber || ''} foi gerado com sucesso.`,
     })
 
     clearOrder()
@@ -182,8 +189,8 @@ export default function Review() {
             onClick={handleApprove}
             className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white h-11 px-8 text-base shadow-sm transition-colors"
           >
-            <CheckCircle className="w-5 h-5 mr-2" />
-            Aprovar e Gerar CSV
+            <FileSpreadsheet className="w-5 h-5 mr-2" />
+            Aprovar e Gerar Excel (.xlsx)
           </Button>
         </div>
       </div>

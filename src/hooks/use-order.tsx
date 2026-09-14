@@ -9,7 +9,7 @@ export interface OrderHeader {
   nature: string
   /**
    * id_cliente resolvido no MySQL externo a partir do CNPJ (Fluxo 1 do
-   * preenchimento automático). Não faz parte do CSV exportado — só existe
+   * preenchimento automático). Não faz parte do Excel exportado — só existe
    * para viabilizar a busca de produto por item (Fluxo 2). Nulo/ausente
    * enquanto o CNPJ não for encontrado na base ou não tiver sido buscado.
    */
