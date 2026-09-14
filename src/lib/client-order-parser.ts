@@ -129,15 +129,21 @@ function parseSingleOrderBlock(
       const tokens = trimmed.split(/\s+/)
       const eanIdx = tokens.findIndex((t) => t === barcode)
 
-      let itemCode = ''
+      // IMPORTANTE: nenhum valor extraído aqui pode virar `itemCode`.
+      // O token adjacente ao EAN (ex: "859949", "58891") é o código do
+      // CLIENTE/fornecedor no próprio documento, não o código interno
+      // Zalike — vai para `reference`, que o Fluxo 2 (lookup no ERP,
+      // enrichItemsWithIdCliente) aceita como valor de busca junto com o
+      // EAN. itemCode só é preenchido pelo Fluxo 2 ou por edição manual do
+      // usuário na tela de revisão.
+      let clientCode = ''
       let reference = ''
       let qty = '1'
 
-      // Check adjacent tokens for item code (usually 5 to 6 digits)
       if (eanIdx !== -1) {
         // Look right of EAN (e.g. 7899536110849 859949 ELASTICO...)
         if (eanIdx + 1 < tokens.length && /^\d{4,8}$/.test(tokens[eanIdx + 1])) {
-          itemCode = tokens[eanIdx + 1]
+          clientCode = tokens[eanIdx + 1]
         }
         // Belshop pattern: Item(1) Referência(2108BN) EAN(7899536126253) CodigoBelshop(58891)
         // Or look left of EAN for reference
@@ -148,10 +154,11 @@ function parseSingleOrderBlock(
         ) {
           reference = tokens[eanIdx - 1]
         }
-        if (!itemCode && eanIdx + 1 < tokens.length && /^\d{4,8}$/.test(tokens[eanIdx + 1])) {
-          itemCode = tokens[eanIdx + 1]
-        }
       }
+
+      // Prefere a referência explícita (ex: "2108BN"); se não houver, usa o
+      // código do cliente encontrado à direita do EAN como valor de busca.
+      const referenceForLookup = reference || clientCode
 
       // Look for quantity:
       // In Mundo dos Cosméticos: "... [DESCRIÇÃO] [Qt. Pedida: 12] [Vlr IPI: 0,00] ..."
@@ -175,9 +182,9 @@ function parseSingleOrderBlock(
 
       items.push({
         id: crypto.randomUUID(),
-        itemCode,
+        itemCode: '',
         barcode,
-        reference,
+        reference: referenceForLookup,
         qty,
       })
     }
