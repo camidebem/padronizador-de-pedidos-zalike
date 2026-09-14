@@ -121,8 +121,16 @@ export async function extractFromExcel(file: File): Promise<ExtractedOrder> {
     const qtyRaw = colQty !== -1 ? String(row[colQty] || '').trim() : ''
     const refRaw = colRef !== -1 ? String(row[colRef] || '').trim() : ''
     const descRaw = colDesc !== -1 ? String(row[colDesc] || '').trim() : ''
-    const itemCodeRaw =
+    // IMPORTANTE: a coluna "código" da planilha de origem é o código do
+    // CLIENTE (ex: "Código Belshop"), nunca o código interno Zalike.
+    // itemCode só pode ser preenchido pelo Fluxo 2 (lookup no ERP via
+    // enrichItemsWithIdCliente) ou por edição manual do usuário na tela de
+    // revisão — nunca pela extração. Se não houver referência própria,
+    // aproveitamos o código do cliente como valor de busca em `reference`
+    // (a API /produto aceita EAN, código-no-cliente OU referência).
+    const clientCodeRaw =
       colItemCode !== -1 && colItemCode !== colEan ? String(row[colItemCode] || '').trim() : ''
+    const referenceForLookup = refRaw || clientCodeRaw
 
     if (colStore !== -1 && String(row[colStore] || '').trim() && !storeContext) {
       storeContext = String(row[colStore] || '').trim()
@@ -134,12 +142,12 @@ export async function extractFromExcel(file: File): Promise<ExtractedOrder> {
     const parsedQty = parseFloat(qtyRaw.replace(',', '.'))
 
     // Must have at least a barcode or reference, and a positive quantity to be a valid item
-    if ((barcode.length >= 7 || refRaw.length > 0) && !isNaN(parsedQty) && parsedQty > 0) {
+    if ((barcode.length >= 7 || referenceForLookup.length > 0) && !isNaN(parsedQty) && parsedQty > 0) {
       items.push({
         id: crypto.randomUUID(),
-        itemCode: itemCodeRaw,
+        itemCode: '',
         barcode: barcode,
-        reference: refRaw,
+        reference: referenceForLookup,
         qty: String(Math.round(parsedQty)),
       })
     }

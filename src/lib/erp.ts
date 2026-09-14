@@ -79,6 +79,42 @@ export function lookupProduto(
 }
 
 /**
+ * Executa `fn` para cada item de `items`, mas no máximo `limit` chamadas em
+ * paralelo por vez (em vez de Promise.all disparando tudo de uma vez).
+ *
+ * Isso existe porque o bridge (server/) só abre um pool de 3 conexões com o
+ * MySQL e tem um circuit breaker que abre após 3 falhas consecutivas
+ * (ficando bloqueado por minutos). Um pedido com muitos itens (ex: 38, ou
+ * uma página de um lote de 55 pedidos) disparando todas as buscas ao mesmo
+ * tempo facilmente satura esse pool — principalmente logo após o Render
+ * "acordar" do modo economia de energia, quando a primeira leva de
+ * requisições é mais lenta. O resultado observado era TODOS os itens
+ * daquele pedido voltando como "não encontrado" de uma vez, mesmo com os
+ * dados corretos no banco — assinatura de circuit breaker aberto, não de
+ * cadastro faltando.
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let nextIndex = 0
+
+  async function worker() {
+    for (;;) {
+      const current = nextIndex++
+      if (current >= items.length) return
+      results[current] = await fn(items[current])
+    }
+  }
+
+  const workerCount = Math.max(1, Math.min(limit, items.length))
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  return results
+}
+
+/**
  * Fluxo 1: a partir do CNPJ já presente no header, busca cliente/forma de
  * pagamento/representante e devolve um header com os campos preenchidos.
  * Nunca sobrescreve um valor que o usuário já tenha digitado manualmente.
@@ -113,23 +149,23 @@ export async function enrichHeaderFromCnpj(header: OrderHeader): Promise<OrderHe
  * idCliente já resolvido no Fluxo 1. Só preenche itens que ainda não têm
  * Código Interno — nunca sobrescreve edição manual do usuário.
  */
+const PRODUTO_LOOKUP_CONCURRENCY = 3
+
 export async function enrichItemsWithIdCliente(
   items: OrderItem[],
   idCliente: string | null | undefined,
 ): Promise<OrderItem[]> {
   if (!idCliente) return items
 
-  return Promise.all(
-    items.map(async (item) => {
-      if (item.itemCode.trim()) return item
+  return mapWithConcurrency(items, PRODUTO_LOOKUP_CONCURRENCY, async (item) => {
+    if (item.itemCode.trim()) return item
 
-      const valor = item.barcode.trim() || item.reference.trim()
-      if (!valor) return item
+    const valor = item.barcode.trim() || item.reference.trim()
+    if (!valor) return item
 
-      const result = await lookupProduto(idCliente, valor)
-      if (!result) return item
+    const result = await lookupProduto(idCliente, valor)
+    if (!result) return item
 
-      return { ...item, itemCode: result.produtoCodigo }
-    }),
-  )
+    return { ...item, itemCode: result.produtoCodigo }
+  })
 }

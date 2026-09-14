@@ -80,13 +80,24 @@ export async function normalizeTextWithAi(
     // Normalize CNPJ to standard XX.XXX.XXX/XXXX-XX format
     const formattedCnpj = formatCnpj(rawCnpj)
 
-    const mappedItems = (o.items || []).map((it) => ({
-      id: crypto.randomUUID(),
-      itemCode: (it.itemCode || '').trim(),
-      barcode: (it.barcode || '').replace(/\D/g, '').trim(),
-      reference: (it.reference || '').trim(),
-      qty: String(it.qty || '1').trim(),
-    }))
+    const mappedItems = (o.items || []).map((it) => {
+      const reference = (it.reference || '').trim()
+      // IMPORTANTE: itemCode nunca deve vir da extração/IA — é sempre o
+      // código do CLIENTE no documento original, nunca o código interno
+      // Zalike (esse só é resolvido pelo Fluxo 2 no ERP, ou digitado à mão
+      // na revisão). Mesmo com o prompt do agente já instruído a deixar
+      // itemCode vazio, esta é uma rede de segurança: se a IA devolver algo
+      // ali mesmo assim, ele vira valor de busca em `reference` (aceito
+      // pelo Fluxo 2 junto com o EAN) em vez de contaminar o campo final.
+      const aiItemCode = (it.itemCode || '').trim()
+      return {
+        id: crypto.randomUUID(),
+        itemCode: '',
+        barcode: (it.barcode || '').replace(/\D/g, '').trim(),
+        reference: reference || aiItemCode,
+        qty: String(it.qty || '1').trim(),
+      }
+    })
 
     return {
       id: crypto.randomUUID(),
